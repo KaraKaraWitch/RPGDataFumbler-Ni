@@ -11,39 +11,7 @@ from .EventsModels.KMSActiveMessage import EvtPluginKMSActiveMessage
 
 EVENTS_TYPES = EventBase | EventText | EvtPluginKMSActiveMessage | EventChoice
 
-# Copied from DazedTL
-JP_TRANSFORMS = str.maketrans(
-    {
-        "？": "?",
-        "！": "!",
-        "。": ".",
-        "…": "...",
-        "　": " ",
-        "―": "-",
-        # Dakuten
-        "\uFF9E": "",
-    }
-)
-
 OPEN_BRACE = set(["「", '"', "(", "（", "*", "["])
-
-JP_DEEXPAND = re.compile(r"(\.{3}\.+)")
-# JP_RUBY = re.compile(r'([\\]+[r][b]?\[.*?,(.*?)\])')
-
-
-def transform_text(text: str):
-    text = text.translate(JP_TRANSFORMS)
-    text = JP_DEEXPAND.sub("...", text)
-    return text
-    # ruby text is complex.
-    # I know that RJ366405 uses it in such a way
-    # that it can break DazedMTL's ruby regex
-
-    # def rb(match:re.Match):
-    #     return match.group(1)
-
-    # text = JP_RUBY.sub("...",text)
-
 
 class EventInterpreter:
     def __init__(self, events: list[EventBase], config: TomlConfig) -> None:

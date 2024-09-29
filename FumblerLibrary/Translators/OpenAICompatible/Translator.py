@@ -1,5 +1,6 @@
 import asyncio
 import collections
+from copy import deepcopy
 import pathlib
 import re
 from itertools import islice
@@ -12,6 +13,62 @@ import orjson
 import tqdm
 
 from FumblerLibrary.FumblerModels import TomlConfig, TranslationContainer
+
+JP_TRANSFORMS = str.maketrans(
+    {
+        "？": "?",
+        "！": "!",
+        "。": ".",
+        "…": "...",
+        "　": " ",
+        "―": "-",
+        # Dakuten
+        "\uFF9E": "",
+    }
+)
+
+JP_POSTFIX = str.maketrans(
+    {
+        "？": "?",
+        "！": "!",
+        "。": ".",
+        "…": "...",
+        "　": " ",
+        "―": "-",
+        # Dakuten
+        "\uFF9E": "",
+    }
+)
+
+
+JP_DEEXPAND = re.compile(r"(\.{3}\.+)")
+# JP_RUBY = re.compile(r'([\\]+[r][b]?\[.*?,(.*?)\])')
+
+
+def transform_text(text: str):
+    text = text.translate(JP_TRANSFORMS)
+    text = text.replace("  ", " ")
+    text = JP_DEEXPAND.sub("...", text)
+    return text
+    # ruby text is complex.
+    # I know that RJ366405 uses it in such a way
+    # that it can break DazedMTL's ruby regex
+
+    # def rb(match:re.Match):
+    #     return match.group(1)
+
+    # text = JP_RUBY.sub("...",text)
+
+
+def normalize_responses(text: dict[str, list[str] | str]):
+    for k, v in deepcopy(text).items():
+        if isinstance(v, str):
+            v = transform_text(v)
+        elif isinstance(v, list):
+            for idx, jp_string in enumerate(v):
+                v[idx] = transform_text(jp_string)
+        text[k] = v
+    return text
 
 
 class OAICompatTranslator:
@@ -32,6 +89,7 @@ class OAICompatTranslator:
             )
         else:
             self.template = None
+        self.concurrency = asyncio.Semaphore(config.api.concurrency)
 
     @staticmethod
     def dict_chunk(data, chunk: int):
@@ -51,12 +109,16 @@ class OAICompatTranslator:
         system_prompt = self.config.prompts.get_system_prompt(section_type)
         batch_size = self.config.prompts.batch
         for chunk in self.dict_chunk(event_group, batch_size):
+            if self.config.prompts.transform_inputs:
+                wrapped_chunk = normalize_responses(chunk)
+            else:
+                wrapped_chunk = chunk
             yield (
                 system_prompt,
                 chunk,
                 {
                     "role": "user",
-                    "content": self.wrap_json(chunk),
+                    "content": self.wrap_json(wrapped_chunk),
                 },
             )
 
@@ -72,16 +134,6 @@ class OAICompatTranslator:
     json_data_extractor = re.compile(r"(```)json(.*)\1", flags=re.DOTALL)
     jp_regex = re.compile(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+")
     JP_Braces = re.compile(r"[「」]")
-
-    post_fix = str.maketrans(
-        {
-            "？": "?",
-            "！": "!",
-            "。": ".",
-            "…": "...",
-            "　": " ",
-        }
-    )
 
     async def do_retryable_completion_text(
         self,
@@ -137,9 +189,9 @@ class OAICompatTranslator:
             for k, v in raw_chunk.items():
                 # Check for JP braces in original
                 if isinstance(v, str):
-                    has_braces_inorig = True if self.JP_Braces.search(v) else False
+                    has_braces_inorig = len(self.JP_Braces.findall(v))
                 else:
-                    has_braces_inorig = False
+                    has_braces_inorig = 0
 
                 if k.upper() not in response_json:
                     logger.debug(
@@ -171,9 +223,9 @@ class OAICompatTranslator:
                     break
                 # Braces check.
                 if isinstance(v, str):
-                    has_braces_intl = True if self.JP_Braces.search(tl_data) else False
+                    has_braces_intl = len(self.JP_Braces.findall(tl_data))
                 else:
-                    has_braces_intl = False
+                    has_braces_intl = 0
                 if (
                     has_braces_inorig != has_braces_intl
                     and key_ignore.get(k.upper(), 0) <= 2
@@ -186,10 +238,8 @@ class OAICompatTranslator:
                 # tries -= 1
                 continue
             # Apply post-fixes
-            for k, v in response_json.items():
-                if isinstance(v, str):
-                    response_json[k] = v.translate(self.post_fix)
-
+            if self.config.prompts.transform_inputs:
+                response_json = normalize_responses(response_json)
             return response_json
 
     async def do_container(
@@ -216,15 +266,16 @@ class OAICompatTranslator:
                 append_completion = (
                     f"Translated {self.config.prompts.dest_lang}:\n```json"
                 )
-                response_json = await self.do_retryable_completion_text(
-                    # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
-                    str(template_module),
-                    raw_chunk,
-                    template_module.stop_strings,  # type: ignore
-                    inject=append_completion,
-                )
+                async with self.concurrency:
+                    response_json = await self.do_retryable_completion_text(
+                        # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
+                        str(template_module),
+                        raw_chunk,
+                        template_module.stop_strings,  # type: ignore
+                        inject=append_completion,
+                    )
                 if response_json is None:
-                    logger.warning(f"Gave up with batch container ID: {idx}.")
+                    logger.warning(f"Gave up with batch container: {raw_chunk}.")
                     break
                 if container.translated is None:
                     container.translated = {}

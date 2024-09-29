@@ -15,7 +15,7 @@ class PromptConfig(pydantic.BaseModel):
     _sample_in: dict[str, str]
     _sample_out: dict[str, str]
 
-    transform_japanese:bool = True
+    transform_inputs:bool = True
 
     @property
     def get_text_db(self):

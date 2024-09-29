@@ -15,6 +15,8 @@ def dump2csv():
                 spamwriter = csv.writer(csvfp, delimiter='\t',
                             quotechar='"', quoting=csv.QUOTE_MINIMAL)
                 for k,v in orjson.loads(file.read_bytes()).items():
+                    if isinstance(v,list):
+                        v = "\n".join(v)
                     spamwriter.writerow([k,v])
             
         

@@ -153,6 +153,7 @@ class MVMZParser:
                             isinstance(eventData, EventText)
                             and tuple([eventData.name, eventData.text]) in text_maps
                         ):
+                            logger.info("Applying Text Pair")
                             key = tuple([eventData.name, eventData.text])
                             tl_data = text_maps[key]
                             eventData.name = tl_data[0]
