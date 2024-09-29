@@ -1,0 +1,18 @@
+[
+    {
+        "L_00": "カルタ\n\\FS[29]「エリー様、\nアミさんをどこかで見かけましたか？」\\FFFF[ShopC_Smile]",
+        "L_01": "エリー\n「ん？ああそうだ！廊下で見かけたよ。」",
+        "L_02": "カルタ\n「本当ですか？助かります！最近、彼女を見かけないので心配になって。」",
+        "L_20": "…？！",
+        "L_25": "カルタ\n\\FS[29]「ところで、\nエリー様も少しお疲れのように見えますが…？」\\FFFF[rfjnsaefk]",
+        "L_27": "エリー\n「そう？大丈夫、大したことないよ。」"
+    },
+    {
+        "L_00": "Karuta\n\\FS[29]「Ellie-sama,\nhave you seen Ami-san anywhere?」\\FFFF[ShopC_Smile]",
+        "L_01": "Ellie\n「Hm? Ah yes! I saw them at the hallway.」",
+        "L_02": "Karuta\n「Really? That's a relief! I haven't seen her lately and I was getting worried.」",
+        "L_20": "...?!",
+        "L_25": "Karuta\n\\FS[29]「By the way, Ellie-sama,\nyou look a bit tired as well...」\\FFFF[rfjnsaefk]",
+        "L_27": "Ellie\n「Really? I'm fine, it's nothing serious.」"
+    }
+]

@@ -1,0 +1,102 @@
+[api]
+
+# REQUIRED
+key=""
+# Empty for default OAI
+host=""
+# Model to use
+model="MarinaraSpaghetti/NemoMix-Unleashed-12B"
+# Maximum inflight requests.
+# This basically means how many containers can be translated at once
+concurrency = 2
+
+[api.params]
+
+# Local models
+temperature=2.5
+min_p=0.3
+max_tokens=1200
+
+# If you're using oai, comment the above `temperature` & `min_p`
+# and use the following
+
+# temperature = 1
+# frequency_penalty=0.2
+
+[prompts]
+
+# If using a local model, consider setting this to whatever the model prefers (ChatML, Llama 3.1, alpaca, etc.)
+# If you're using OAI or an endpoint that has Chat Templates enabled (e.g. TabbyAPI/Aphrodite-engine with the right prompt format), consider removing this.
+template="chatml"
+
+# Batch size
+batch=10
+# The max user, response pairs to keep.
+history=3
+
+# The base system template
+system = """
+You are a expert game translator who is translating Japanese Text from a game into English. 
+Your task is to accurately translate, edit, refactor, and restructure Japanese text from a game into English.
+
+Ensure that you translate the text precisely without adding notes or romaji, and return the translation in as a formatted JSON.
+
+Retain Japanese quotation marks such as "「」" in the translated text.
+Use appropriate honorifics such as -san, -senpai, and -chan within your translations.
+When dealing with pronouns, use "They/Them" if the character's gender is ambiguous, otherwise use "She/Her" for female characters and "He/Him" for male characters.
+Preserve any code-related text within brackets [] and retain any color codes such as #FF9900 as they appear in the original text.
+
+The following are Common Terms. Use the DB as reference.
+
+{db_data}
+
+{mode}
+A example of the `user` input is shown:
+
+```json
+{sample_in}
+```
+
+Your assistant response must be in the following format. A sample is shown based on the previous input. Do not include any names from the sample!
+
+```json
+{sample_out}
+```
+"""
+
+[prompts.modes]
+# Modes must match with section
+item = """
+Currently you are working on translating items. You are given the name, description and note of the item.
+"""
+
+# Used for dialogue events.
+event = """
+Currently you are working on translating dialogue within the game.
+"""
+
+# Unused.
+event_choice = """
+Currently you are working on translating text events within the game. Currently at a dialogue option.
+"""
+
+# Used for skills
+skill = """
+Currently you are working on translating skills within the game. You are given the name, description and note of the item.
+"""
+
+[engine.rpgmaker]
+
+# If the game is MV, it does not have a field to put the speaker name
+# In this case, we guess the speaker from the first field.
+# This check is from DazedMTL. In essence:
+# 0. Check if config option is enabled and that the "name" even is not filled (aka "MV" a-like game and not MZ with names)
+#    - for MZ games, if it's a empty name it will be an empty string.
+# 1. Check the next event is for adding text and valid
+# 2. Current line is < 40 characters
+# 3. Next line has a "Open Brace"
+# This takes place in EventInterpreter.py
+speaker_check_for_mv = true
+# Transform text that is considered "problematic"
+# Taken from DazedMTL.
+transform_japanese = true

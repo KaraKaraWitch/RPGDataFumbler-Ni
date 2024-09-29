@@ -1,0 +1,81 @@
+import enum
+from typing import Any, Generic, List, TypeVar
+
+from pydantic import BaseModel
+
+T = TypeVar("T")
+
+
+class EventTypes(enum.IntEnum):
+    SHOW_CHOICES = 102
+    INPUT_NUMBER = 103
+    SELECT_ITEM = 104
+
+    CONDITIONAL_BRANCH = 111
+    COMMON_EVENT = 119
+    CONTROL_SWITCHES = 121
+    CONTROL_VARIABLES = 122
+    CHANGE_GOLD = 125
+    CHANGE_ITEMS = 126
+    CHANGE_WEAPONS = 127
+    CHANGE_ARMORS = 128
+    CHANGE_PARTY_MEMBER = 129
+
+    TRANSFER_PLAYER = 201
+    SET_VEHICLE_LOCATION = 202
+    SET_EVENT_LOCATION = 203
+
+    SHOW_ANIMATION = 212
+    SHOW_PICTURE = 231
+    MOVE_PICTURE = 232
+    GET_LOCATION_INFO = 285
+
+    BATTLE_PROCESSING = 301
+    NAME_INPUT_PROCESSING = 303
+
+    CHANGE_HP = 311
+    CHANGE_MP = 312
+    CHANGE_STATE = 313
+    RECOVER_ALL = 314
+    CHANGE_EXP = 315
+    CHANGE_LEVEL = 316
+    CHANGE_PARAMETER = 317
+    CHANGE_SKILL = 318
+    CHANGE_EQUIPMENT = 319
+    CHANGE_NAME = 320
+    CHANGE_CLASS = 321
+    CHANGE_ACTOR_IMAGES = 322
+    CHANGE_NICKNAME = 324
+    CHANGE_PROFILE = 325
+    CHANGE_TP = 326
+
+    CHANGE_ENEMY_HP = 331
+    CHANGE_ENEMY_MP = 332
+    CHANGE_ENEMY_STATE = 333
+    ENEMY_TRANSFORM = 336
+    SHOW_BATTLE_ANIMATION = 337
+    FORCE_ACTION = 339
+    CHANGE_ENEMY_TP = 342
+
+    SHOW_TEXT = 101
+    ADD_TEXT = 401
+    WHEN_COND = 402
+    SHOW_SCROLLING_TEXT = 405
+
+    SET_MOVEMENT_ROUTE = 505
+    SHOP_PROCESSING = 605
+
+    EVENT_COMMENT = 107
+    EVENT_COMMENT_2 = 108
+
+
+class EventBase(BaseModel):
+    code: EventTypes | int
+    indent: int
+    parameters: List[Any]
+
+
+class EventWrapped(Generic[T]):
+    @classmethod
+    def wrap(cls, event: EventBase) -> "T | None":
+        raise NotImplementedError()

@@ -1,0 +1,7 @@
+config.toml
+inputs/*.json
+inputs/*.jsonl
+outputs/*.jsonl
+outputs/*.json
+__pycache__
+/knowledge_db.toml

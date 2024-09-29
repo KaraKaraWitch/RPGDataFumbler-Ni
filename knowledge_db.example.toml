@@ -1,0 +1,15 @@
+[db]
+
+# Example
+# "すごい"="Sugoi"
+
+# Generic (Consider keeping these)
+"XX様"="XX-sama"
+"XXさん"="XX-san"
+"XXちゃん"="XX-chan"
+"XX先輩"="XX-senpai"
+"フェラ"="fellatio"
+"「"="「"
+"」"="」"
+
+# Add your own here! Comment out with `#`
