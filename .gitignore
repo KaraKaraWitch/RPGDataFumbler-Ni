@@ -3,5 +3,6 @@ inputs/*.json
 inputs/*.jsonl
 outputs/*.jsonl
 outputs/*.json
+outputs/*.csv
 __pycache__
 /knowledge_db.toml

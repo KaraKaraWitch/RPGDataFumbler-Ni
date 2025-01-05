@@ -19,7 +19,14 @@ class PromptConfig(pydantic.BaseModel):
 
     @property
     def get_text_db(self):
-        db_text = "; ".join([f'"{k}": "{v}"' for k, v in self.db.items()])
+        db_text = []
+        for k,v in self.db.items():
+            if isinstance(v,str) or (isinstance(v,list) and len(v) == 1):
+                db_text.append(f'"{k}": "{v[0]}"')
+            elif isinstance(v,list) and len(v) > 1:
+                v_notes = ', '.join(v[1:])
+                db_text.append(f'"{k}": "{v[0]}" ({v_notes})')
+        db_text = "; ".join(db_text)
         db_text = f"[{db_text}]"
         return db_text
 
@@ -88,7 +95,14 @@ class TranslationContainer(pydantic.BaseModel):
             return mappings
         transformed_keys = {k.upper():v for k,v in self.translated.items()}
         for k, v in self.data.items():
+            if k not in transformed_keys.keys():
+                print(f"!! Missing key? {k}")
+                continue
             if isinstance(v,list):
                 v = tuple(v)
             mappings[v] = transformed_keys[k]
         return mappings
+
+    @property
+    def dump(self):
+        return self.data

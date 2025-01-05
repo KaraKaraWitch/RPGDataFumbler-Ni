@@ -8,7 +8,7 @@ from FumblerLibrary.FumblerModels import TomlConfig
 
 
 async def process_rpgmaker(
-    inputs: list[pathlib.Path], output_folder: pathlib.Path, config: TomlConfig
+    inputs: list[pathlib.Path], output_folder: pathlib.Path, config: TomlConfig,dump:bool=False, format:str="mv"
 ):
     from .Parsers.RPGMVMZ.GameParser import MVMZParser
     from .Translators.OpenAICompatible.Translator import OAICompatTranslator
@@ -27,6 +27,13 @@ async def process_rpgmaker(
         if parsed_data is None:
             return
         translation_containers = parser.prepare_tl_containers(parsed_data)
+        if dump:
+            if translation_containers and any([i for i in translation_containers if i]):
+                translation_containers = [i.dump for i in translation_containers if i]
+                if translation_containers:
+                    output_file = (output_folder / origFile.with_stem(origFile.stem + "_dump").name).write_bytes(orjson.dumps(translation_containers,option=orjson.OPT_INDENT_2))
+            origFile.unlink()
+            return
         if not translation_containers:
             return
         logger.debug(translation_containers)

@@ -1,4 +1,5 @@
 import pathlib
+from re import I
 from typing import Any, List
 
 import orjson
@@ -17,16 +18,63 @@ from .RPGMVZModels import (
     Enemy,
     Item,
     MapFile,
+    RubyActor,
+    RubyMapFile,
+    RubyState,
+    RubyThing,
     Skill,
 )
 
 
 class MVMZParser:
-    def __init__(self, files: list[pathlib.Path], config: TomlConfig) -> None:
+    def __init__(self, files: list[pathlib.Path], config: TomlConfig, is_ruby_like:bool=False) -> None:
         self.files = files
         self.parsed: list[tuple[pathlib.Path, Any]] = []
-        self.parse_files()
+        if is_ruby_like:
+            logger.warning("Parsing RGSS Database JSON as MV. This is experimental!")
+            self.parse_ruby_as_mv_like()
+        else:
+            self.parse_files()
         self.config = config
+        
+    def parse_ruby_as_mv_like(self):
+        
+        classMappers = {
+            "RPG::Actor":RubyActor,
+            "RPG::Item":RubyThing,
+            "RPG::Armor":RubyThing,
+            "RPG::Weapon":RubyThing,
+            "RPG::State":RubyState,
+            "RPG::Map":RubyMapFile,
+        }
+        
+        for file in self.files:
+            file = file.resolve()
+            logger.info(f"[Rby Alike] Loading {file} with RPGM Loader...")
+            try:
+                json_data = orjson.loads(file.read_bytes())
+            except orjson.JSONDecodeError:
+                logger.warning(f"Decode error for: {file}")
+                continue
+            if isinstance(json_data, list) and len(json_data) >= 2:
+                dict_item: dict = json_data[1]
+                
+                clsFn = classMappers.get(dict_item["json_class"])
+                
+                if clsFn:
+                    logger.info(f"Detected {file} as {type(clsFn)}.")
+                    self.parsed.append(
+                        (file, [clsFn(**data) if data else None for data in json_data])
+                    )
+            elif isinstance(json_data, dict) and classMappers.get(json_data["json_class"]):
+                clsFn = classMappers.get(json_data["json_class"])
+                if clsFn:
+                    logger.info(f"Detected {file} as {type(clsFn)}.")
+                    self.parsed.append(
+                        (file, RubyMapFile(**json_data))
+                    )
+                
+                
 
     def parse_files(self):
         for file in self.files:

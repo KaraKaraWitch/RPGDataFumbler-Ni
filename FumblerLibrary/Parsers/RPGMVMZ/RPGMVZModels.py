@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 from .EventsModels.EventBase import EventBase
 
@@ -8,7 +8,7 @@ from .EventsModels.EventBase import EventBase
 class Trait(BaseModel):
     code: int
     dataId: int
-    value: int
+    value: float
 
 
 class Actor(BaseModel):
@@ -27,7 +27,6 @@ class Actor(BaseModel):
     note: str
     profile: str
     traits: List[Trait]
-
 
 class Page(BaseModel):
     conditions: dict
@@ -180,5 +179,41 @@ class MapFile(BaseModel):
     data: List[int]
     events: List[Optional[Events]]
 
+# Ruby based
 
-# Lists are just RootModels
+class RubyActor(BaseModel, extra='allow'):
+    name:str
+    description:str
+    nickname:str
+
+class RubyThing(BaseModel, extra='allow'):
+    """Generic "Name" / "Description"
+    """
+    name:str
+    description:str
+
+class RubySkill(RubyThing):
+    message1: str
+    message2: str
+
+class RubyState(RubySkill):
+    message3: str
+    message4: str
+    
+class RubyCommonEvent(BaseModel, extra='allow'):
+    list: List[EventBase]
+    name: str
+
+class RubyPage(BaseModel, extra='allow'):
+    list: List[EventBase]
+
+class RubyEvents(BaseModel, extra='allow'):
+    id: int
+    name: str
+    note: str
+    pages: List[RubyPage]
+    x: int
+    y: int
+
+class RubyMapFile(BaseModel):
+    events: List[Optional[RubyEvents]]

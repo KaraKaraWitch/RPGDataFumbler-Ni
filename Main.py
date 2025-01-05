@@ -26,14 +26,14 @@ def prepare_config(root_dir: pathlib.Path):
 
 
 @app.command(name="rpgmaker")
-def rpgmaker():
+def rpgmaker(dump:bool=False, format:str="mv"):
     logger.info("Translating RPG Maker Data...")
     main_dir = pathlib.Path(__file__).resolve().parent
 
     files = list((main_dir / "inputs").glob("*.json"))
     output_folder = pathlib.Path("outputs")
     config = prepare_config(main_dir)
-    asyncio.run(process_rpgmaker(files, output_folder, config))
+    asyncio.run(process_rpgmaker(files, output_folder, config,dump=dump,format=format))
 
 
 @app.command(name="_")

@@ -127,7 +127,8 @@ class OAICompatTranslator:
         try:
             async for chunk in stream:
                 buffer += chunk.choices[0].text
-        except httpx.RemoteProtocolError:
+        except Exception as e:
+            logger.exception(e)
             return None
         return buffer
 
@@ -155,6 +156,7 @@ class OAICompatTranslator:
             response: str | None = await self.stream_to_str(completion)
             if response is None:
                 logger.warning("Server Stopped sending. Retrying")
+                await asyncio.sleep(5)
                 continue
             response = inject + response
             extracted_response = self.json_data_extractor.search(response)
@@ -252,21 +254,22 @@ class OAICompatTranslator:
         for system, raw_chunk, chunk in self.format_messages(
             section_type, section_data
         ):
-            logger.debug(f"Working on chunk: {raw_chunk}")
-            if self.template:
-                queue.append(chunk)
-                vars = {
-                    "add_generation_prompt": True,
-                    "stop_strings": [],
-                    "messages": [{"role": "system", "content": system}, *queue],
-                }
-                logger.debug(vars)
+            async with self.concurrency:
+                logger.debug(f"Working on chunk: {raw_chunk}")
+                if self.template:
+                    queue.append(chunk)
+                    vars = {
+                        "add_generation_prompt": True,
+                        "stop_strings": [],
+                        "messages": [{"role": "system", "content": system}, *queue],
+                    }
+                    logger.debug(vars)
 
-                template_module = self.template.make_module(vars)
-                append_completion = (
-                    f"Translated {self.config.prompts.dest_lang}:\n```json"
-                )
-                async with self.concurrency:
+                    template_module = self.template.make_module(vars)
+                    append_completion = (
+                        f"\nTranslated text to {self.config.prompts.dest_lang}:\n```json"
+                    )
+                    
                     response_json = await self.do_retryable_completion_text(
                         # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
                         str(template_module),
@@ -274,22 +277,22 @@ class OAICompatTranslator:
                         template_module.stop_strings,  # type: ignore
                         inject=append_completion,
                     )
-                if response_json is None:
-                    logger.warning(f"Gave up with batch container: {raw_chunk}.")
-                    break
-                if container.translated is None:
-                    container.translated = {}
-                if response_json:
-                    container.translated.update(response_json)
-                    queue.append(
-                        {
-                            "role": "assistant",
-                            "content": self.wrap_json(response_json),
-                        }
-                    )
-                    logger.debug(f"Translated chunk: {response_json}")
-            else:
-                raise NotImplementedError()
+                    if response_json is None:
+                        logger.warning(f"Gave up with batch container: {raw_chunk}.")
+                        break
+                    if container.translated is None:
+                        container.translated = {}
+                    if response_json:
+                        container.translated.update(response_json)
+                        queue.append(
+                            {
+                                "role": "assistant",
+                                "content": self.wrap_json(response_json),
+                            }
+                        )
+                        logger.debug(f"Translated chunk: {response_json}")
+                else:
+                    raise NotImplementedError()
         return container
 
     async def translate_containers_batched(

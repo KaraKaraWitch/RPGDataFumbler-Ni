@@ -69,7 +69,7 @@ class EventTypes(enum.IntEnum):
     EVENT_COMMENT_2 = 108
 
 
-class EventBase(BaseModel):
+class EventBase(BaseModel, extra="allow"):
     code: EventTypes | int
     indent: int
     parameters: List[Any]
