@@ -4,23 +4,28 @@ import pathlib
 from loguru import logger
 import orjson
 
-from FumblerLibrary.FumblerModels import TomlConfig
+from FumblerLibrary.FumblerModels import SupportedRPGEngine, TomlConfig
 
 
 async def process_rpgmaker(
-    inputs: list[pathlib.Path], output_folder: pathlib.Path, config: TomlConfig,dump:bool=False, format:str="mv"
+    inputs: list[pathlib.Path],
+    output_folder: pathlib.Path,
+    config: TomlConfig,
+    dump: bool = False,
+    format: SupportedRPGEngine = SupportedRPGEngine.js,
 ):
     from .Parsers.RPGMVMZ.GameParser import MVMZParser
     from .Translators.OpenAICompatible.Translator import OAICompatTranslator
 
-    parser = MVMZParser(inputs, config)
+    treat_as_ruby = SupportedRPGEngine.rb == format
+    parser = MVMZParser(inputs, config, is_ruby_like=treat_as_ruby)
     if len(parser.parsed) == 0:
         logger.error("No MV/MZ files detected.")
         return
 
     translator = OAICompatTranslator(config)
     logger.info(f"Translating: {len(parser.parsed)} files.")
-    
+
     # Gross code wrapped into a worker
     async def patch_worker(origFile: pathlib.Path, parsed_data):
         # Prepare containers for file and
@@ -31,7 +36,11 @@ async def process_rpgmaker(
             if translation_containers and any([i for i in translation_containers if i]):
                 translation_containers = [i.dump for i in translation_containers if i]
                 if translation_containers:
-                    output_file = (output_folder / origFile.with_stem(origFile.stem + "_dump").name).write_bytes(orjson.dumps(translation_containers,option=orjson.OPT_INDENT_2))
+                    output_file = (
+                        output_folder / origFile.with_stem(origFile.stem + "_dump").name
+                    ).write_bytes(
+                        orjson.dumps(translation_containers, option=orjson.OPT_INDENT_2)
+                    )
             origFile.unlink()
             return
         if not translation_containers:
@@ -46,9 +55,7 @@ async def process_rpgmaker(
         logger.debug(translation_containers)
         logger.info(f"Applying: {len([i for i in translation_containers if i])}")
 
-        parsed_data = parser.apply_tl_containers(
-            parsed_data, translation_containers
-        )
+        parsed_data = parser.apply_tl_containers(parsed_data, translation_containers)
 
         output_file = output_folder / origFile.name
         output_dump_file = (
@@ -56,9 +63,7 @@ async def process_rpgmaker(
         )
 
         if isinstance(parsed_data, list):
-            parsed_data = [
-                i.model_dump(mode="json") if i else i for i in parsed_data
-            ]
+            parsed_data = [i.model_dump(mode="json") if i else i for i in parsed_data]
             (output_file).write_bytes(
                 orjson.dumps(parsed_data, option=orjson.OPT_INDENT_2)
             )

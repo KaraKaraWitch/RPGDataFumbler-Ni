@@ -6,9 +6,9 @@ from .EventBase import EventBase, EventWrapped
 
 
 class EventText(EventBase):
-    # EventText extends from EventBase. 
+    # EventText extends from EventBase.
     # This combines multiple show text codes into 1 bigger block
-    
+
     # (faceName, faceIndex)
     # ...faceIndex is supposed to be a string but
     # I suppose it gets cast to an integer?
@@ -17,7 +17,7 @@ class EventText(EventBase):
     position: int
     text: str
     name: str | None
-    is_predicted:bool
+    is_predicted: bool
 
     @property
     def as_evtbase(self) -> Generator[EventBase, None, None]:
@@ -40,7 +40,7 @@ class EventText(EventBase):
         # as is?
         else:
             yield EventBase(code=101, indent=self.indent, parameters=root_params)
-            
+
         self.text = textwrap.fill(self.text)
         for section in self.text.split("\n"):
             yield EventBase(code=401, indent=self.indent, parameters=[section])

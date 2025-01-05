@@ -27,7 +27,9 @@ from .RPGMVZModels import (
 
 
 class MVMZParser:
-    def __init__(self, files: list[pathlib.Path], config: TomlConfig, is_ruby_like:bool=False) -> None:
+    def __init__(
+        self, files: list[pathlib.Path], config: TomlConfig, is_ruby_like: bool = False
+    ) -> None:
         self.files = files
         self.parsed: list[tuple[pathlib.Path, Any]] = []
         if is_ruby_like:
@@ -36,18 +38,17 @@ class MVMZParser:
         else:
             self.parse_files()
         self.config = config
-        
+
     def parse_ruby_as_mv_like(self):
-        
         classMappers = {
-            "RPG::Actor":RubyActor,
-            "RPG::Item":RubyThing,
-            "RPG::Armor":RubyThing,
-            "RPG::Weapon":RubyThing,
-            "RPG::State":RubyState,
-            "RPG::Map":RubyMapFile,
+            "RPG::Actor": RubyActor,
+            "RPG::Item": RubyThing,
+            "RPG::Armor": RubyThing,
+            "RPG::Weapon": RubyThing,
+            "RPG::State": RubyState,
+            "RPG::Map": RubyMapFile,
         }
-        
+
         for file in self.files:
             file = file.resolve()
             logger.info(f"[Rby Alike] Loading {file} with RPGM Loader...")
@@ -58,25 +59,33 @@ class MVMZParser:
                 continue
             if isinstance(json_data, list) and len(json_data) >= 2:
                 dict_item: dict = json_data[1]
-                
+
                 clsFn = classMappers.get(dict_item["json_class"])
-                
+
                 if clsFn:
                     logger.info(f"Detected {file} as {type(clsFn)}.")
                     self.parsed.append(
                         (file, [clsFn(**data) if data else None for data in json_data])
                     )
-            elif isinstance(json_data, dict) and classMappers.get(json_data["json_class"]):
+            elif isinstance(json_data, dict) and classMappers.get(
+                json_data["json_class"]
+            ):
                 clsFn = classMappers.get(json_data["json_class"])
                 if clsFn:
                     logger.info(f"Detected {file} as {type(clsFn)}.")
-                    self.parsed.append(
-                        (file, RubyMapFile(**json_data))
-                    )
-                
-                
+                    self.parsed.append((file, RubyMapFile(**json_data)))
 
     def parse_files(self):
+        keyMappers = {
+            ("characterName"): Actor,
+            ("atypeId", "etypeId"): Armor,
+            ("expParams", "learnings"): Classes,
+            ("switchId", "trigger"): CommonEvent,
+            ("battlerHue"): Enemy,
+            ("consumable"): Item,
+            ("requiredWtypeId1"): Skill,
+        }
+
         for file in self.files:
             file = file.resolve()
             logger.info(f"Loading {file} with RPGM Loader...")
@@ -87,50 +96,16 @@ class MVMZParser:
                 continue
             if isinstance(json_data, list) and len(json_data) >= 2:
                 dict_item: dict = json_data[1]
-                if "characterName" in dict_item:
-                    logger.info(f"Detected {file} as ActorList.")
-                    self.parsed.append(
-                        (file, [Actor(**data) if data else None for data in json_data])
-                    )
-                elif "atypeId" in dict_item and "etypeId" in dict_item:
-                    logger.info(f"Detected {file} as ArmorList.")
-                    self.parsed.append(
-                        (file, [Armor(**data) if data else None for data in json_data])
-                    )
-                elif "expParams" in dict_item and "learnings" in dict_item:
-                    logger.info(f"Detected {file} as ClassesList.")
-                    self.parsed.append(
-                        (
-                            file,
-                            [Classes(**data) if data else None for data in json_data],
+                thingKeys: set[str] = set(list(dict_item.keys()))
+                for k, clsFn in keyMappers.items():
+                    if set(k).intersection(thingKeys) == len(k):
+                        logger.info(f"Detected {file} as {type(clsFn).__name__}List.")
+                        self.parsed.append(
+                            (
+                                file,
+                                [clsFn(**data) if data else None for data in json_data],
+                            )
                         )
-                    )
-                elif "switchId" in dict_item and "trigger" in dict_item:
-                    logger.info(f"Detected {file} as CommonEventsList.")
-                    self.parsed.append(
-                        (
-                            file,
-                            [
-                                CommonEvent(**data) if data else None
-                                for data in json_data
-                            ],
-                        )
-                    )
-                elif "battlerHue" in dict_item:
-                    logger.info(f"Detected {file} as EnemyList.")
-                    self.parsed.append(
-                        (file, [Enemy(**data) if data else None for data in json_data])
-                    )
-                elif "consumable" in dict_item:
-                    logger.info(f"Detected {file} as ItemsList")
-                    self.parsed.append(
-                        (file, [Item(**data) if data else None for data in json_data])
-                    )
-                elif "requiredWtypeId1" in dict_item:
-                    logger.info(f"Detected {file} as SkillsList")
-                    self.parsed.append(
-                        (file, [Skill(**data) if data else None for data in json_data])
-                    )
             elif isinstance(json_data, dict):
                 if "autoplayBgm" in json_data:
                     logger.info(f"Detected MapFile: {file}")

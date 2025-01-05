@@ -28,6 +28,7 @@ class Actor(BaseModel):
     profile: str
     traits: List[Trait]
 
+
 class Page(BaseModel):
     conditions: dict
     directionFix: bool
@@ -179,41 +180,50 @@ class MapFile(BaseModel):
     data: List[int]
     events: List[Optional[Events]]
 
+
 # Ruby based
 
-class RubyActor(BaseModel, extra='allow'):
-    name:str
-    description:str
-    nickname:str
 
-class RubyThing(BaseModel, extra='allow'):
-    """Generic "Name" / "Description"
-    """
-    name:str
-    description:str
+class RubyActor(BaseModel, extra="allow"):
+    name: str
+    description: str
+    nickname: str
+
+
+class RubyThing(BaseModel, extra="allow"):
+    """Generic "Name" / "Description" """
+
+    name: str
+    description: str
+
 
 class RubySkill(RubyThing):
     message1: str
     message2: str
 
+
 class RubyState(RubySkill):
     message3: str
     message4: str
-    
-class RubyCommonEvent(BaseModel, extra='allow'):
+
+
+class RubyCommonEvent(BaseModel, extra="allow"):
     list: List[EventBase]
     name: str
 
-class RubyPage(BaseModel, extra='allow'):
+
+class RubyPage(BaseModel, extra="allow"):
     list: List[EventBase]
 
-class RubyEvents(BaseModel, extra='allow'):
+
+class RubyEvents(BaseModel, extra="allow"):
     id: int
     name: str
     note: str
     pages: List[RubyPage]
     x: int
     y: int
+
 
 class RubyMapFile(BaseModel):
     events: List[Optional[RubyEvents]]

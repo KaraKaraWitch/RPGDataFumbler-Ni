@@ -1,16 +1,14 @@
 import asyncio
 import collections
-from copy import deepcopy
 import pathlib
 import re
+from copy import deepcopy
 from itertools import islice
 
-import httpx
 import jinja2
-from loguru import logger
 import openai
 import orjson
-import tqdm
+from loguru import logger
 
 from FumblerLibrary.FumblerModels import TomlConfig, TranslationContainer
 
@@ -23,7 +21,7 @@ JP_TRANSFORMS = str.maketrans(
         "　": " ",
         "―": "-",
         # Dakuten
-        "\uFF9E": "",
+        "\uff9e": "",
     }
 )
 
@@ -36,7 +34,7 @@ JP_POSTFIX = str.maketrans(
         "　": " ",
         "―": "-",
         # Dakuten
-        "\uFF9E": "",
+        "\uff9e": "",
     }
 )
 
@@ -225,7 +223,14 @@ class OAICompatTranslator:
                     break
                 # Braces check.
                 if isinstance(v, str):
-                    has_braces_intl = len(self.JP_Braces.findall(tl_data))
+                    if isinstance(tl_data, str):
+                        has_braces_intl = len(self.JP_Braces.findall(tl_data))
+                    else:
+                        logger.debug(
+                            orjson.dumps(response_json, option=orjson.OPT_INDENT_2)
+                        )
+                        logger.warning("Mismatched json key and value.")
+                        all_keys_matched = False
                 else:
                     has_braces_intl = 0
                 if (
@@ -266,10 +271,8 @@ class OAICompatTranslator:
                     logger.debug(vars)
 
                     template_module = self.template.make_module(vars)
-                    append_completion = (
-                        f"\nTranslated text to {self.config.prompts.dest_lang}:\n```json"
-                    )
-                    
+                    append_completion = f"\nTranslated text to {self.config.prompts.dest_lang}:\n```json"
+
                     response_json = await self.do_retryable_completion_text(
                         # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
                         str(template_module),
@@ -304,9 +307,9 @@ class OAICompatTranslator:
         async def container_worker():
             while container_queue.qsize() > 0:
                 try:
-                    data: tuple[
-                        int, TranslationContainer
-                    ] = container_queue.get_nowait()
+                    data: tuple[int, TranslationContainer] = (
+                        container_queue.get_nowait()
+                    )
                 except asyncio.QueueEmpty:
                     break
                 index, container = data

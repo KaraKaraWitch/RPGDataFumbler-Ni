@@ -13,6 +13,7 @@ EVENTS_TYPES = EventBase | EventText | EvtPluginKMSActiveMessage | EventChoice
 
 OPEN_BRACE = set(["「", '"', "(", "（", "*", "["])
 
+
 class EventInterpreter:
     def __init__(self, events: list[EventBase], config: TomlConfig) -> None:
         """RPG Maker Event Interpreter

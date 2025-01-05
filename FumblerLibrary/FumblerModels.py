@@ -1,3 +1,4 @@
+import enum
 from typing import Any
 import orjson
 import pydantic
@@ -15,16 +16,16 @@ class PromptConfig(pydantic.BaseModel):
     _sample_in: dict[str, str]
     _sample_out: dict[str, str]
 
-    transform_inputs:bool = True
+    transform_inputs: bool = True
 
     @property
     def get_text_db(self):
         db_text = []
-        for k,v in self.db.items():
-            if isinstance(v,str) or (isinstance(v,list) and len(v) == 1):
+        for k, v in self.db.items():
+            if isinstance(v, str) or (isinstance(v, list) and len(v) == 1):
                 db_text.append(f'"{k}": "{v[0]}"')
-            elif isinstance(v,list) and len(v) > 1:
-                v_notes = ', '.join(v[1:])
+            elif isinstance(v, list) and len(v) > 1:
+                v_notes = ", ".join(v[1:])
                 db_text.append(f'"{k}": "{v[0]}" ({v_notes})')
         db_text = "; ".join(db_text)
         db_text = f"[{db_text}]"
@@ -68,13 +69,13 @@ class ApiConfig(pydantic.BaseModel):
     concurrency: int = 2
     params: dict[str, Any]
 
+
 class MVMZMangling(pydantic.BaseModel):
-    speaker_check_for_mv:bool = True
-    
+    speaker_check_for_mv: bool = True
+
 
 class EngineConfig(pydantic.BaseModel):
-    
-    rpgmaker:MVMZMangling
+    rpgmaker: MVMZMangling
 
 
 class TomlConfig(pydantic.BaseModel):
@@ -93,12 +94,12 @@ class TranslationContainer(pydantic.BaseModel):
         mappings = {}
         if not self.translated:
             return mappings
-        transformed_keys = {k.upper():v for k,v in self.translated.items()}
+        transformed_keys = {k.upper(): v for k, v in self.translated.items()}
         for k, v in self.data.items():
             if k not in transformed_keys.keys():
                 print(f"!! Missing key? {k}")
                 continue
-            if isinstance(v,list):
+            if isinstance(v, list):
                 v = tuple(v)
             mappings[v] = transformed_keys[k]
         return mappings
@@ -106,3 +107,8 @@ class TranslationContainer(pydantic.BaseModel):
     @property
     def dump(self):
         return self.data
+
+
+class SupportedRPGEngine(enum.Enum):
+    js = "js"
+    rb = "rb"

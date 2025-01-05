@@ -11,15 +11,19 @@ app = typer.Typer()
 def dump2csv():
     for file in pathlib.Path("outputs").iterdir():
         if file.stem.endswith("_dump"):
-            with open(file.with_stem(file.stem + "_csv").with_suffix(".csv"),"w",newline="",encoding="utf-8") as csvfp:
-                spamwriter = csv.writer(csvfp, delimiter='\t',
-                            quotechar='"', quoting=csv.QUOTE_MINIMAL)
-                for k,v in orjson.loads(file.read_bytes()).items():
-                    if isinstance(v,list):
+            with open(
+                file.with_stem(file.stem + "_csv").with_suffix(".csv"),
+                "w",
+                newline="",
+                encoding="utf-8",
+            ) as csvfp:
+                spamwriter = csv.writer(
+                    csvfp, delimiter="\t", quotechar='"', quoting=csv.QUOTE_MINIMAL
+                )
+                for k, v in orjson.loads(file.read_bytes()).items():
+                    if isinstance(v, list):
                         v = "\n".join(v)
-                    spamwriter.writerow([k,v])
-            
-        
+                    spamwriter.writerow([k, v])
 
 
 @app.command(name="_")
