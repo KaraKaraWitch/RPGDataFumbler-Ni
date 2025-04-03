@@ -77,6 +77,7 @@ There's a LOT of abstractions due to how complex it is. Please bear with it. I'l
 ## Models
 
 - I found `MarinaraSpaghetti/NemoMix-Unleashed-12B` to be quite good from model testing.
+- Personal mix `KaraKaraWitch/MachiNoDolphin-Qwen2.5-72b` for the scale and plus users would be the best for quality.
 - ??? Probably add more.
 
 ## Credits

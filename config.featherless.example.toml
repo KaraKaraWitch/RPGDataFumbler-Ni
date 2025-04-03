@@ -34,17 +34,30 @@ batch=10
 # The max user, response pairs to keep.
 history=3
 
+# Performs pre and post text normalization
+# 1. Converts full width punctuations to half-width / english
+# 2. Expands … -> ...
+# 3. collapses additional spaces.
+# By default, it should be enabled. I don't think there is any point in time to disable this as it improves overall translation.
+transform_inputs = true
+
+# Used for system prompt.
+source_lang = "Japanese"
+# Used for system prompt and forced json response alignment.
+# This is injected at the start of each assistant response to try and get the model to behave.
+dest_lang = "English"
+
 # The base system template
 system = """
-You are a expert game translator who is translating Japanese Text from a game into English. 
-Your task is to accurately translate, edit, refactor, and restructure Japanese text from a game into English.
+You are a expert game translator who is translating {source_lang} Text from a game into {dest_lang}. 
+Accurately and Creatively translate, edit, refactor, and restructure {source_lang} text into {dest_lang}, returning only a valid json format.
 
-Ensure that you translate the text precisely without adding notes or romaji, and return the translation in as a formatted JSON.
+Your assistant response must be in {dest_lang}.
 
-Retain Japanese quotation marks such as "「」" in the translated text.
+Retain {source_lang} quotation marks such as "「」" in the translated text.
 Use appropriate honorifics such as -san, -senpai, and -chan within your translations.
 When dealing with pronouns, use "They/Them" if the character's gender is ambiguous, otherwise use "She/Her" for female characters and "He/Him" for male characters.
-Preserve any code-related text within brackets [] and retain any color codes such as #FF9900 as they appear in the original text.
+Preserve any code-related text within brackets [] and retain any color codes such as \\c[] as they appear in the original text.
 
 The following are Common Terms. Use the DB as reference.
 

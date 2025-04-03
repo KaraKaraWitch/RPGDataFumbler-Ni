@@ -40,6 +40,11 @@ JP_POSTFIX = str.maketrans(
 
 
 JP_DEEXPAND = re.compile(r"(\.{3}\.+)")
+WAIT025 = re.compile(r"\\\.")
+WAIT1 = re.compile(r"\\\|")
+WAITKEYPRESS = re.compile(r"\\\!")
+SFX = re.compile(r"\\SE\[(\d+)\]")
+SMPPOSE = re.compile(r"\\SM\[(.+)\]")
 # JP_RUBY = re.compile(r'([\\]+[r][b]?\[.*?,(.*?)\])')
 
 
@@ -47,6 +52,13 @@ def transform_text(text: str):
     text = text.translate(JP_TRANSFORMS)
     text = text.replace("  ", " ")
     text = JP_DEEXPAND.sub("...", text)
+    # Experiment
+    # The trick with fixing \. is to expand it into a for for the LLM to keep / rmemeber.
+    text = WAIT025.sub("<PAUSE 0.25s>", text)
+    text = WAIT1.sub("<PAUSE 1s>", text)
+    text = WAITKEYPRESS.sub("<PAUSE KEY_PRESS>", text)
+    text = SFX.sub(r"<SFX \1>", text)
+    text = SMPPOSE.sub(r"<SM_POSE \1>", text)
     return text
     # ruby text is complex.
     # I know that RJ366405 uses it in such a way
@@ -56,6 +68,43 @@ def transform_text(text: str):
     #     return match.group(1)
 
     # text = JP_RUBY.sub("...",text)
+
+SFXUnTransform = re.compile(r"<SFX (\d+)>")
+SMPPOSEUnTransform = re.compile(r"<SM_POSE (.+)>")
+
+def detransform(text: str):
+    print(text)
+    replacements = (
+        text
+        # Fix weird spacing issues.
+        .replace("<PAUSE KEY PRESS>", "<PAUSE KEY_PRESS>")
+        .replace("<PAUSE KEYPRESS>", "<PAUSE KEY_PRESS>")
+        .replace(" <PAUSE 0.25s> ", "\\.")
+        .replace(" <PAUSE 1s> ", "\\|")
+        .replace(" <PAUSE KEY_PRESS> ", "\\!")
+        
+        .replace(" <PAUSE 0.25s>", "\\.")
+        .replace(" <PAUSE 1s>", "\\|")
+        .replace(" <PAUSE KEY_PRESS>", "\\!")
+        
+        .replace("<PAUSE 0.25s>", "\\.")
+        .replace("<PAUSE 1s>", "\\|")
+        .replace("<PAUSE KEY_PRESS>", "\\!")
+        
+    )
+    replacements = SFXUnTransform.sub(r"\\SE[\1]",replacements)
+    replacements = SMPPOSEUnTransform.sub(r"\\SM[\1]",replacements)
+    return replacements
+
+def detransform_responses(text: dict[str, list[str] | str]):
+    for k, v in deepcopy(text).items():
+        if isinstance(v, str):
+            v = detransform(v)
+        elif isinstance(v, list):
+            for idx, jp_string in enumerate(v):
+                v[idx] = detransform(jp_string)
+        text[k] = v
+    return text
 
 
 def normalize_responses(text: dict[str, list[str] | str]):
@@ -107,10 +156,7 @@ class OAICompatTranslator:
         system_prompt = self.config.prompts.get_system_prompt(section_type)
         batch_size = self.config.prompts.batch
         for chunk in self.dict_chunk(event_group, batch_size):
-            if self.config.prompts.transform_inputs:
-                wrapped_chunk = normalize_responses(chunk)
-            else:
-                wrapped_chunk = chunk
+            wrapped_chunk = normalize_responses(chunk)
             yield (
                 system_prompt,
                 chunk,
@@ -261,8 +307,8 @@ class OAICompatTranslator:
                 # tries -= 1
                 continue
             # Apply post-fixes
-            if self.config.prompts.transform_inputs:
-                response_json = normalize_responses(response_json)
+            response_json = detransform_responses(normalize_responses(response_json))
+            logger.debug(f"Final transformed: {response_json}")
             return response_json
 
     async def do_container(
@@ -309,7 +355,9 @@ class OAICompatTranslator:
                                 "content": self.wrap_json(response_json),
                             }
                         )
-                        logger.debug(f"Translated chunk:\n{raw_chunk}\n -> {response_json}")
+                        logger.debug(
+                            f"Translated chunk:\n{raw_chunk}\n -> {response_json}"
+                        )
                 else:
                     raise NotImplementedError()
         return container
