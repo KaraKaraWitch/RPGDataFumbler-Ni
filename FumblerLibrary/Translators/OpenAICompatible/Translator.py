@@ -143,45 +143,61 @@ class OAICompatTranslator:
     ):
         tries = 10
         key_ignore = {}
+        do_append = True
+        if "response_format" in self.config.api.params:
+            # response should just be json... in theory.
+            do_append = False
         while tries > 0:
-            completion = await self.oai.completions.create(
-                model=self.config.api.model,
-                prompt=prompt + inject,
-                stop=stopping_strings,
-                extra_body=self.config.api.params,
-                stream=True,
-            )
+            try:
+                completion = await self.oai.completions.create(
+                    model=self.config.api.model,
+                    prompt=prompt + inject,
+                    stop=stopping_strings,
+                    extra_body=self.config.api.params,
+                    stream=True,
+                )
+            except openai.InternalServerError:
+                logger.warning("Server returned an InternalServerError. Retrying")
+                await asyncio.sleep(5)
+                continue
             response: str | None = await self.stream_to_str(completion)
             if response is None:
                 logger.warning("Server Stopped sending. Retrying")
                 await asyncio.sleep(5)
                 continue
-            response = inject + response
-            extracted_response = self.json_data_extractor.search(response)
-            if not extracted_response:
-                logger.debug(response)
-                logger.warning(
-                    f"! Can't find expected json output. Tries left: {tries}"
-                )
-                tries -= 1
-                continue
+            if do_append:
+                response = inject + response
+                extracted_response = self.json_data_extractor.search(response)
+                if not extracted_response:
+                    logger.debug(response)
+                    logger.warning(
+                        f"! Can't find expected json output. Tries left: {tries}"
+                    )
+                    tries -= 1
+                    continue
+                try:
+                    json_text = extracted_response.group(2)
+                except Exception as e:
+                    logger.warning(f"Cannot decode response: {e}. Tries left: {tries}")
+            else:
+                json_text = response
             try:
-                response_json: dict = orjson.loads(extracted_response.group(2))
-                extracted: str = extracted_response.group(2)
+                response_json: dict = orjson.loads(json_text)
+                extracted: str = json_text
             except orjson.JSONDecodeError as e:
-                logger.debug(extracted_response.group(2))
+                logger.debug(json_text)
                 logger.warning(f"Cannot decode response: {e}. Tries left: {tries}")
                 tries -= 1
                 continue
             if len(list(response_json.keys())) != len(list(raw_chunk.keys())):
-                logger.debug(extracted_response.group(2))
+                logger.debug(json_text)
                 logger.warning(
                     f"Decoded keys: {len(list(response_json.keys()))} does not match expected. {len(list(raw_chunk.keys()))}. Tries left: {tries}"
                 )
                 tries -= 1
                 continue
             if self.jp_regex.search(extracted):
-                logger.debug(extracted_response.group(2))
+                logger.debug(json_text)
                 logger.warning(f"Found Japanese Text. Retrying... Tries left: {tries}")
                 continue
             response_json = {k.upper(): v for k, v in response_json.items()}
@@ -268,10 +284,10 @@ class OAICompatTranslator:
                         "stop_strings": [],
                         "messages": [{"role": "system", "content": system}, *queue],
                     }
-                    logger.debug(vars)
+                    # logger.debug(vars)
 
                     template_module = self.template.make_module(vars)
-                    append_completion = f"\nTranslated text to {self.config.prompts.dest_lang}:\n```json"
+                    append_completion = f"\nLocalized & Translated text to {self.config.prompts.dest_lang}:\n"
 
                     response_json = await self.do_retryable_completion_text(
                         # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
@@ -293,7 +309,7 @@ class OAICompatTranslator:
                                 "content": self.wrap_json(response_json),
                             }
                         )
-                        logger.debug(f"Translated chunk: {response_json}")
+                        logger.debug(f"Translated chunk:\n{raw_chunk}\n -> {response_json}")
                 else:
                     raise NotImplementedError()
         return container

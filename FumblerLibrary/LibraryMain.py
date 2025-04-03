@@ -12,17 +12,22 @@ async def process_rpgmaker(
     output_folder: pathlib.Path,
     config: TomlConfig,
     dump: bool = False,
+    precheck: bool = False,
     format: SupportedRPGEngine = SupportedRPGEngine.js,
 ):
     from .Parsers.RPGMVMZ.GameParser import MVMZParser
     from .Translators.OpenAICompatible.Translator import OAICompatTranslator
 
     treat_as_ruby = SupportedRPGEngine.rb == format
+    logger.debug(f"Treat as ruby? {treat_as_ruby}")
     parser = MVMZParser(inputs, config, is_ruby_like=treat_as_ruby)
     if len(parser.parsed) == 0:
         logger.error("No MV/MZ files detected.")
         return
 
+    if precheck:
+        print(parser.extract_prepass())
+        return
     translator = OAICompatTranslator(config)
     logger.info(f"Translating: {len(parser.parsed)} files.")
 

@@ -1,5 +1,6 @@
 import pathlib
 from re import I
+import re
 from typing import Any, List
 
 import orjson
@@ -19,6 +20,7 @@ from .RPGMVZModels import (
     Item,
     MapFile,
     RubyActor,
+    RubyCommonEvent,
     RubyMapFile,
     RubyState,
     RubyThing,
@@ -47,6 +49,7 @@ class MVMZParser:
             "RPG::Weapon": RubyThing,
             "RPG::State": RubyState,
             "RPG::Map": RubyMapFile,
+            "RPG::CommonEvent": RubyCommonEvent,
         }
 
         for file in self.files:
@@ -63,7 +66,7 @@ class MVMZParser:
                 clsFn = classMappers.get(dict_item["json_class"])
 
                 if clsFn:
-                    logger.info(f"Detected {file} as {type(clsFn)}.")
+                    logger.info(f"Detected {file} as {clsFn.__name__}.")
                     self.parsed.append(
                         (file, [clsFn(**data) if data else None for data in json_data])
                     )
@@ -72,8 +75,40 @@ class MVMZParser:
             ):
                 clsFn = classMappers.get(json_data["json_class"])
                 if clsFn:
-                    logger.info(f"Detected {file} as {type(clsFn)}.")
+                    logger.info(f"Detected {file} as {clsFn.__name__}.")
                     self.parsed.append((file, RubyMapFile(**json_data)))
+
+    def extract_prepass(self):
+        prepass_data = {"Names": set()}
+
+        namesearch = re.compile(r"\\NA[(.+?)]", flags=re.DOTALL)
+
+        for file, data in self.parsed:
+            if isinstance(data, list):
+                if len(data) > 1 and isinstance(data[1], (Actor, RubyActor)):
+                    [prepass_data["Names"].add(i.name) for i in data]
+                    [prepass_data["Names"].add(i.nickname) for i in data]
+            elif isinstance(data, (MapFile, RubyMapFile)):
+                if isinstance(data.events, dict):
+                    iter = data.events.values()
+                else:
+                    iter = data.events
+                for mapEvent in iter:
+                    if not mapEvent:
+                        continue
+                    for page in mapEvent.pages:
+                        for event in EventInterpreter.decompile(page.list, self.config):
+                            if not event or not isinstance(event, EventText):
+                                continue
+                            if event.name:
+                                prepass_data["Names"].add(event.name)
+                            search_r = namesearch.search(event.text)
+                            if search_r and len(search_r.group(1)) <= 20:
+                                prepass_data["Names"].add(search_r.group(1))
+        for k, v in prepass_data.items():
+            if isinstance(v, set):
+                prepass_data[k] = list(v)
+        return prepass_data
 
     def parse_files(self):
         keyMappers = {
@@ -98,7 +133,10 @@ class MVMZParser:
                 dict_item: dict = json_data[1]
                 thingKeys: set[str] = set(list(dict_item.keys()))
                 for k, clsFn in keyMappers.items():
-                    if set(k).intersection(thingKeys) == len(k):
+                    # quick meme
+                    skhynix = set(k)
+                    print(skhynix, thingKeys)
+                    if skhynix.intersection(thingKeys) == skhynix:
                         logger.info(f"Detected {file} as {type(clsFn).__name__}List.")
                         self.parsed.append(
                             (
@@ -300,6 +338,28 @@ class MVMZParser:
                 else:
                     map_events_list.append(None)
             return map_events_list
+        elif isinstance(data, RubyMapFile):
+            # Map files
+            map_events_list: list[TranslationContainer | None] = []
+            for _, (mapIdx, mapEvent) in tqdm.tqdm(
+                enumerate(data.events.items()), desc="Map Events Processed"
+            ):
+                # Flatten page data to just a list of events for the map.
+                if mapEvent:
+                    for pageidx, page in enumerate(mapEvent.pages):
+                        pageData = self._interp_event_list(page.list)
+                        if pageData:
+                            map_events_list.append(
+                                TranslationContainer(tl_type="event", data=pageData)
+                            )
+                        else:
+                            map_events_list.append(None)
+                    else:
+                        map_events_list.append(None)
+                else:
+                    map_events_list.append(None)
+            return map_events_list
+
         elif isinstance(data, list):
             # List can mean anything so we check for the 2nd value.
             # 1st value in RPGM stuff is always null.
@@ -321,6 +381,21 @@ class MVMZParser:
                     else:
                         list_containers.append(None)
                 return list_containers
+            elif isinstance(data[1], RubyCommonEvent):
+                for _, commEvt in tqdm.tqdm(
+                    enumerate(data), desc="Map Events Processed"
+                ):
+                    if not commEvt:
+                        list_containers.append(None)
+                        continue
+                    pageData = self._interp_event_list(commEvt.list)
+                    if pageData:
+                        list_containers.append(
+                            TranslationContainer(tl_type="event", data=pageData)
+                        )
+                    else:
+                        list_containers.append(None)
+                return list_containers
             elif isinstance(data[1], Item):
                 main_container = TranslationContainer(tl_type="item", data={})
                 for itemidx, item in tqdm.tqdm(enumerate(data), desc="Items Processed"):
@@ -328,6 +403,16 @@ class MVMZParser:
                         list_containers.append(None)
                         continue
                     item_data = [item.name, item.description, item.note]
+                    if any(item_data):
+                        main_container.data[f"IT_{str(itemidx).zfill(4)}"] = item_data
+                return [main_container]
+            elif isinstance(data[1], RubyThing):
+                main_container = TranslationContainer(tl_type="item", data={})
+                for itemidx, item in tqdm.tqdm(enumerate(data), desc="Items Processed"):
+                    if not item or not isinstance(item, RubyThing):
+                        list_containers.append(None)
+                        continue
+                    item_data = [item.name, item.description]
                     if any(item_data):
                         main_container.data[f"IT_{str(itemidx).zfill(4)}"] = item_data
                 return [main_container]

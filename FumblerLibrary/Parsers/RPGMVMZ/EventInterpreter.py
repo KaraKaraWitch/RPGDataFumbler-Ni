@@ -1,6 +1,7 @@
 import re
 from typing import Callable, Generator, List
 
+from loguru import logger
 import tqdm
 
 from FumblerLibrary.FumblerModels import TomlConfig
@@ -63,6 +64,7 @@ class EventInterpreter:
         base_event = event_data
         name: str | None = None
         parse_speakers: bool = self.config_mvmz.speaker_check_for_mv
+        ghost_speakers: bool = self.config_mvmz.ghost_names
         is_predicted = False
         if len(event_data.parameters) == 5:
             faceName, faceIdx, bgmIdx, positionType, name = event_data.parameters
@@ -74,6 +76,7 @@ class EventInterpreter:
             self.ptr += 1
             event_data = self.events[self.ptr]
             step = 0
+            first_ptr = self.ptr
             while event_data.code == EventTypes.ADD_TEXT.value:
                 text: str = event_data.parameters[0]
 
@@ -105,6 +108,16 @@ class EventInterpreter:
                 if nxt_data is None or event_data.code != EventTypes.ADD_TEXT.value:
                     break
                 event_data = self.events[self.ptr]
+            # Ghost speaker check. See config for details
+            if ghost_speakers and not is_predicted:
+                if self.events[first_ptr - 1].code == 231:
+                    placeholder_speaker = self.events[self.ptr - 1]
+                    if placeholder_speaker.parameters[1] in self.config_mvmz.ghost_replace:
+                        name = self.config_mvmz.ghost_replace[placeholder_speaker.parameters[1]]
+                    else:
+                        logger.debug(f"Ghost name: {placeholder_speaker.parameters[1]} not found.")
+                        name = placeholder_speaker.parameters[1]
+            
         if not parse_speakers or value["name"] is None:
             value["text"] = "\n".join(value["text"])
         else:
@@ -119,7 +132,7 @@ class EventInterpreter:
             faceData=(faceName, faceIdx),
             background=bgmIdx,
             position=positionType,
-            name=name,
+            name=name
         )
 
     def eventCommentParser(self):

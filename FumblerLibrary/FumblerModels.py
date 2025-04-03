@@ -17,6 +17,7 @@ class PromptConfig(pydantic.BaseModel):
     _sample_out: dict[str, str]
 
     transform_inputs: bool = True
+    compact_containers: bool = False
 
     @property
     def get_text_db(self):
@@ -72,6 +73,8 @@ class ApiConfig(pydantic.BaseModel):
 
 class MVMZMangling(pydantic.BaseModel):
     speaker_check_for_mv: bool = True
+    ghost_names: bool = False
+    ghost_replace: dict[str,str] = {}
 
 
 class EngineConfig(pydantic.BaseModel):

@@ -219,11 +219,10 @@ class RubyPage(BaseModel, extra="allow"):
 class RubyEvents(BaseModel, extra="allow"):
     id: int
     name: str
-    note: str
     pages: List[RubyPage]
     x: int
     y: int
 
 
 class RubyMapFile(BaseModel):
-    events: List[Optional[RubyEvents]]
+    events: dict[str,RubyEvents]
