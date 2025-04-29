@@ -68,6 +68,7 @@ class ApiConfig(pydantic.BaseModel):
     host: str = ""
     model: str
     concurrency: int = 2
+    debug: bool = False
     params: dict[str, Any]
 
 

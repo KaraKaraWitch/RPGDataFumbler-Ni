@@ -7,7 +7,7 @@ import typer
 from loguru import logger
 
 from FumblerLibrary.FumblerModels import SupportedRPGEngine, TomlConfig
-from FumblerLibrary.LibraryMain import process_rpgmaker
+from FumblerLibrary.LibraryMain import process_csv, process_rpgmaker
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
@@ -27,26 +27,28 @@ def prepare_config(root_dir: pathlib.Path):
 
 @app.command(name="rpgmaker")
 def rpgmaker(
-    dump: bool = False, format: SupportedRPGEngine = SupportedRPGEngine.js.value, precheck:bool=False
+    dump: bool = False,
+    format: SupportedRPGEngine = SupportedRPGEngine.js.value,
+    precheck: bool = False,
 ):
     """Translates input files as rpgmaker engine.
 
     --precheck: Dumps any infomation for a prepass. Currently only dumps names.
-    
+
     --dump: Dumps the file into a raw parsed format. Does not translate anything
-    
-    
-    
+
+
+
     --format: Sets the "Format to detect". Either "js" or "rb" (ruby) is accepted.
-    
+
     You shouldn't need to change this unless you're doing a VX / VX Ace / XP game.
-    
-    
-    
+
+
+
     NOTES:
 
     - The only format supported when in "ruby" / "rb" format is the exports from SnowSzn/rgss-db-cli.
-    
+
     """
     logger.info("Translating RPG Maker Data...")
     main_dir = pathlib.Path(__file__).resolve().parent
@@ -55,13 +57,21 @@ def rpgmaker(
     output_folder = pathlib.Path("outputs")
     config = prepare_config(main_dir)
     asyncio.run(
-        process_rpgmaker(files, output_folder, config, dump=dump, format=format, precheck=precheck)
+        process_rpgmaker(
+            files, output_folder, config, dump=dump, format=format, precheck=precheck
+        )
     )
 
 
-@app.command(name="_")
-def rpgmaker_dummy():
-    pass
+@app.command(name="csv")
+def csv():
+    logger.info("Translating CSV...")
+    main_dir = pathlib.Path(__file__).resolve().parent
+
+    files = list((main_dir / "inputs").glob("*.csv"))
+    output_folder = pathlib.Path("outputs")
+    config = prepare_config(main_dir)
+    asyncio.run(process_csv(files, output_folder, config))
 
 
 if __name__ == "__main__":

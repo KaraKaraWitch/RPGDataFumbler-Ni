@@ -1,0 +1,6 @@
+{# Metadata #} 
+{%- set stop_strings = ["<|start_header_id|>", "<|eot_id|>"] -%}
+
+{# Template #}
+{% for message in messages %}{{'<|start_header_id|>' + message['role'] + "<|end_header_id|>" + '\n' + message['content'] | trim}}{% if (loop.last and add_generation_prompt) or not loop.last %}{{ '<|eot_id|>' + '\n'}}{% endif %}{% endfor %}
+{% if add_generation_prompt and messages[-1]['role'] != 'assistant' %}{{ '<|start_header_id|>assistant<|end_header_id|>\n' }}{% endif %}

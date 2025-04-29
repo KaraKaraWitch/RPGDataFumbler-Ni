@@ -1,14 +1,19 @@
 import asyncio
 import collections
+from io import StringIO
 import pathlib
 import re
 from copy import deepcopy
 from itertools import islice
+from typing import AsyncGenerator
 
+import httpx
+import httpx_sse
 import jinja2
-import openai
+from .JsonDecoder import try_json_decode
 import orjson
 from loguru import logger
+import tqdm
 
 from FumblerLibrary.FumblerModels import TomlConfig, TranslationContainer
 
@@ -69,11 +74,13 @@ def transform_text(text: str):
 
     # text = JP_RUBY.sub("...",text)
 
+
 SFXUnTransform = re.compile(r"<SFX (\d+)>")
 SMPPOSEUnTransform = re.compile(r"<SM_POSE (.+)>")
 
+
 def detransform(text: str):
-    print(text)
+    # print(text)
     replacements = (
         text
         # Fix weird spacing issues.
@@ -82,19 +89,17 @@ def detransform(text: str):
         .replace(" <PAUSE 0.25s> ", "\\.")
         .replace(" <PAUSE 1s> ", "\\|")
         .replace(" <PAUSE KEY_PRESS> ", "\\!")
-        
         .replace(" <PAUSE 0.25s>", "\\.")
         .replace(" <PAUSE 1s>", "\\|")
         .replace(" <PAUSE KEY_PRESS>", "\\!")
-        
         .replace("<PAUSE 0.25s>", "\\.")
         .replace("<PAUSE 1s>", "\\|")
         .replace("<PAUSE KEY_PRESS>", "\\!")
-        
     )
-    replacements = SFXUnTransform.sub(r"\\SE[\1]",replacements)
-    replacements = SMPPOSEUnTransform.sub(r"\\SM[\1]",replacements)
+    replacements = SFXUnTransform.sub(r"\\SE[\1]", replacements)
+    replacements = SMPPOSEUnTransform.sub(r"\\SM[\1]", replacements)
     return replacements
+
 
 def detransform_responses(text: dict[str, list[str] | str]):
     for k, v in deepcopy(text).items():
@@ -123,8 +128,10 @@ class OAICompatTranslator:
 
     def __init__(self, config: TomlConfig) -> None:
         self.config = config
-        self.oai = openai.AsyncOpenAI(api_key=self.config.api.key)
-        self.oai.base_url = self.config.api.host
+        # self.oai = openai.AsyncOpenAI(api_key=)
+        self.debug = self.config.api.debug
+        self.key = self.config.api.key
+        self.completions = f"{self.config.api.host.rstrip('/')}/completions"
         self.template: jinja2.Template | None
         if self.config.prompts.template:
             self.template = jinja2.Template(
@@ -137,6 +144,27 @@ class OAICompatTranslator:
         else:
             self.template = None
         self.concurrency = asyncio.Semaphore(config.api.concurrency)
+        self.session = httpx.AsyncClient(timeout=None)
+
+    async def sse_execute(self, prompt: str, stopping_strings, param_args: dict):
+        block = {
+            "model": self.config.api.model,
+            "prompt": prompt,
+            "stop": stopping_strings,
+            "stream": True,
+            **param_args,
+        }
+        # print(orjson.dumps(block).decode())
+        return httpx_sse.aconnect_sse(
+            self.session,
+            "POST",
+            self.completions,
+            headers={
+                "user-agent": "ShinonTranslationAgent/1.0.0",
+                "authorization": f"Bearer {self.key}",
+            },
+            json=block,
+        )
 
     @staticmethod
     def dict_chunk(data, chunk: int):
@@ -166,15 +194,45 @@ class OAICompatTranslator:
                 },
             )
 
-    async def stream_to_str(self, stream: openai.AsyncStream[openai.types.Completion]):
-        buffer = ""
-        try:
-            async for chunk in stream:
-                buffer += chunk.choices[0].text
-        except Exception as e:
-            logger.exception(e)
-            return None
-        return buffer
+    async def stream_to_str(
+        self,
+        stream: AsyncGenerator[httpx_sse.EventSource, None],
+    ):
+        buffer = StringIO()
+        async with stream as fff:  # type: ignore
+            try:
+                with tqdm.tqdm(disable=True if self.debug else False) as pbar:
+                    async for event in fff.aiter_sse():
+                        if isinstance(event, httpx_sse.ServerSentEvent):
+                            if event.data == "[DONE]":
+                                pass
+                            else:
+                                event_data = try_json_decode(event.data)
+                                if event_data is None:
+                                    logger.warning(
+                                        f"Server returned an error: \"{event_data}\""
+                                    )
+                                    return None
+                                if "error" in event_data:
+                                    logger.warning(
+                                        f"Server returned an error: \"{event_data['error']}\""
+                                    )
+                                    return None
+                                if "choices" in event_data:
+                                    text = event_data["choices"][0]["text"]
+                                    if self.jp_regex.search(text):
+                                        return None
+                                    buffer.write(text)
+                                    if self.debug:
+                                        print(event_data["choices"][0]["text"], end="",flush=True)
+                                    pbar.update(1)
+                    # print(event)
+                return buffer.getvalue()
+            except Exception as e:
+                logger.exception(e)
+                return None
+                # raise e
+        return None
 
     json_data_extractor = re.compile(r"(```)json(.*)\1", flags=re.DOTALL)
     jp_regex = re.compile(r"[一-龠]+|[ぁ-ゔ]+|[ァ-ヴー]+")
@@ -195,24 +253,28 @@ class OAICompatTranslator:
             do_append = False
         while tries > 0:
             try:
-                completion = await self.oai.completions.create(
-                    model=self.config.api.model,
-                    prompt=prompt + inject,
-                    stop=stopping_strings,
-                    extra_body=self.config.api.params,
-                    stream=True,
+                # print(prompt + inject)
+                r = await self.sse_execute(
+                    prompt + inject if do_append else prompt,
+                    stopping_strings,
+                    self.config.api.params,
                 )
-            except openai.InternalServerError:
+            except Exception as e:
                 logger.warning("Server returned an InternalServerError. Retrying")
                 await asyncio.sleep(5)
                 continue
-            response: str | None = await self.stream_to_str(completion)
+            response: str | None = await self.stream_to_str(r)
             if response is None:
                 logger.warning("Server Stopped sending. Retrying")
                 await asyncio.sleep(5)
                 continue
+            if not response.strip():
+                # logger.debug(prompt + inject)
+                logger.warning("Server Sent empty response. Retrying...")
+                await asyncio.sleep(5)
+                continue
             if do_append:
-                response = inject + response
+                response = inject + response + "```"
                 extracted_response = self.json_data_extractor.search(response)
                 if not extracted_response:
                     logger.debug(response)
@@ -227,12 +289,12 @@ class OAICompatTranslator:
                     logger.warning(f"Cannot decode response: {e}. Tries left: {tries}")
             else:
                 json_text = response
-            try:
-                response_json: dict = orjson.loads(json_text)
-                extracted: str = json_text
-            except orjson.JSONDecodeError as e:
+            
+            response_json: dict|None = try_json_decode(json_text)
+            extracted: str = json_text
+            if response_json is None:
                 logger.debug(json_text)
-                logger.warning(f"Cannot decode response: {e}. Tries left: {tries}")
+                logger.warning(f"Cannot decode response. Tries left: {tries}")
                 tries -= 1
                 continue
             if len(list(response_json.keys())) != len(list(raw_chunk.keys())):
@@ -325,21 +387,24 @@ class OAICompatTranslator:
                 logger.debug(f"Working on chunk: {raw_chunk}")
                 if self.template:
                     queue.append(chunk)
+                    messages = [*queue]
+                    messages.insert(-2,{"role": "system", "content": system})
+                    
                     vars = {
                         "add_generation_prompt": True,
                         "stop_strings": [],
-                        "messages": [{"role": "system", "content": system}, *queue],
+                        "messages": messages,
                     }
-                    # logger.debug(vars)
+                    logger.debug(vars)
 
                     template_module = self.template.make_module(vars)
-                    append_completion = f"\nLocalized & Translated text to {self.config.prompts.dest_lang}:\n"
+                    append_completion = f"\nLocalized & Translated text to {self.config.prompts.dest_lang}:\n```json"
 
                     response_json = await self.do_retryable_completion_text(
                         # HACK: adding "```json" is pretty rough but like... not too sure what else to do lmao
                         str(template_module),
                         raw_chunk,
-                        template_module.stop_strings,  # type: ignore
+                        template_module.stop_strings + ["```"],  # type: ignore
                         inject=append_completion,
                     )
                     if response_json is None:

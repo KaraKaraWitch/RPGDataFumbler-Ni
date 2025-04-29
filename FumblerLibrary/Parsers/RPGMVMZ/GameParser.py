@@ -135,7 +135,7 @@ class MVMZParser:
                 for k, clsFn in keyMappers.items():
                     # quick meme
                     skhynix = set(k)
-                    print(skhynix, thingKeys)
+                    # print(skhynix, thingKeys)
                     if skhynix.intersection(thingKeys) == skhynix:
                         logger.info(f"Detected {file} as {type(clsFn).__name__}List.")
                         self.parsed.append(
