@@ -5,6 +5,7 @@ import pathlib
 import re
 from copy import deepcopy
 from itertools import islice
+import time
 from typing import AsyncGenerator
 
 import httpx
@@ -197,9 +198,11 @@ class OAICompatTranslator:
     async def stream_to_str(
         self,
         stream: AsyncGenerator[httpx_sse.EventSource, None],
-    ):
+    ) -> tuple[str|None,str]:
         buffer = StringIO()
+        timer = time.monotonic()
         async with stream as fff:  # type: ignore
+            logger.debug(f"First Response: {round(time.monotonic() - timer,4)}s")
             try:
                 with tqdm.tqdm(disable=True if self.debug else False) as pbar:
                     async for event in fff.aiter_sse():
@@ -212,25 +215,25 @@ class OAICompatTranslator:
                                     logger.warning(
                                         f"Server returned an error: \"{event_data}\""
                                     )
-                                    return None
+                                    return (None, f"Error: {event_data}")
                                 if "error" in event_data:
                                     logger.warning(
                                         f"Server returned an error: \"{event_data['error']}\""
                                     )
-                                    return None
+                                    return (None, f"Error: {event_data['error']}")
                                 if "choices" in event_data:
                                     text = event_data["choices"][0]["text"]
                                     if self.jp_regex.search(text):
-                                        return None
+                                        return (None, "Japanese Early Drop")
                                     buffer.write(text)
                                     if self.debug:
                                         print(event_data["choices"][0]["text"], end="",flush=True)
                                     pbar.update(1)
                     # print(event)
-                return buffer.getvalue()
+                return (buffer.getvalue(), "OK")
             except Exception as e:
                 logger.exception(e)
-                return None
+                return (None, "Exception")
                 # raise e
         return None
 
@@ -263,9 +266,10 @@ class OAICompatTranslator:
                 logger.warning("Server returned an InternalServerError. Retrying")
                 await asyncio.sleep(5)
                 continue
-            response: str | None = await self.stream_to_str(r)
+            response_tuple: tuple[str | None, str] = await self.stream_to_str(r)
+            response, errkind = response_tuple
             if response is None:
-                logger.warning("Server Stopped sending. Retrying")
+                logger.warning(f"Server Stopped sending. {errkind}")
                 await asyncio.sleep(5)
                 continue
             if not response.strip():
@@ -395,7 +399,7 @@ class OAICompatTranslator:
                         "stop_strings": [],
                         "messages": messages,
                     }
-                    logger.debug(vars)
+                    # logger.debug(vars)
 
                     template_module = self.template.make_module(vars)
                     append_completion = f"\nLocalized & Translated text to {self.config.prompts.dest_lang}:\n```json"

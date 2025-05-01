@@ -64,7 +64,7 @@ class CSVData:
 
         with StringIO(newline="") as f:
             writer = csv.DictWriter(
-                f, ["Speaker", "Dialogue", "tl_Speaker", "tl_Dialogue"]
+                f, ["Speaker", "Dialogue", "tl_Speaker", "tl_Dialogue"], lineterminator="\n"
             )
             writer.writeheader()
             for row in parsed_block.dialogues:
