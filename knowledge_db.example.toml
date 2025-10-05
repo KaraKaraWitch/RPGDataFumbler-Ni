@@ -4,14 +4,20 @@
 # "すごい"="Sugoi"
 
 # Generic (Consider keeping these)
-"XX様" = "XX-sama"
-"XXさん" = "XX-san"
-"XXちゃん" = "XX-chan"
-"XX先輩" = "XX-senpai"
-"フェラ" = "fellatio"
+"XX様" = ["XX-sama", "Honorific"]
+"XXさん" = ["XX-san", "Honorific"]
+"XXちゃん" = ["XX-chan", "Honorific"]
+"XX先輩" = ["XX-senpai", "Honorific"]
+"フェラ" = ["fellatio","Term"]
 "ボテ腹" = ["Pregnant","Anything relating to pregnancy words should be used as such"]
-"「" = "「"
-"」" = "」"
+"「" = ["「"]
+"」" = ["」"]
 
+# For RPGMaker games
+"[\\.]" = ["[\\.]"]
+"\\!" = ["\\!"]
+"\\$" = ["\\$"]
+"\\i[X]" = ["\\i[X]"]
+"\\c[X]" = ["\\c[X]"]
 
 # Add your own here! Comment out with `#`

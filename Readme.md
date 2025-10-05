@@ -7,6 +7,8 @@ RPGDataFumblerNi (RPGDuFu2) follows mimics DazedMTL workflow.
 - RPGMaker (json):
   - MV
   - MZ
+- Any (csvfile):
+  - .CSV files.
 
 ## Who is it for? / Usage
 
@@ -42,7 +44,7 @@ What cannot be concurrent:
 
 The reason why those cannot be represented is because those files are typically not much in size compared to events.
 
-This concurrency limit is applied globally. If using the default of 2, 
+This concurrency limit is applied globally. If using the default of 2, only 2 "translation" requests can be executed at once.
 
 ## Developer Guide
 

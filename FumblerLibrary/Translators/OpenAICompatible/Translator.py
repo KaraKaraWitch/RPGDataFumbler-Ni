@@ -46,12 +46,58 @@ JP_POSTFIX = str.maketrans(
 
 
 JP_DEEXPAND = re.compile(r"(\.{3}\.+)")
-WAIT025 = re.compile(r"\\\.")
-WAIT1 = re.compile(r"\\\|")
-WAITKEYPRESS = re.compile(r"\\\!")
-SFX = re.compile(r"\\SE\[(\d+)\]")
-SMPPOSE = re.compile(r"\\SM\[(.+)\]")
+NOARG_CMD = re.compile(r"\\(\.|\||\{|\}|\!)")
+# WAIT025 = re.compile(r"\\\.")
+# WAIT1 = re.compile(r"\\")
+# FONTUP = re.compile(r"\\")
+# FONTDOWN = re.compile(r"\\")
+# WAITKEYPRESS = re.compile(r"\\")
+# SFX = re.compile(r"\\SE\[(\d+)\]")
+TEXT_CMD = re.compile(r"\\([^\\]*?)\[(.*?)\]")
 # JP_RUBY = re.compile(r'([\\]+[r][b]?\[.*?,(.*?)\])')
+
+TEXTEFF = {
+    "C": "COLOR",
+    "F": "STAND_PIC_1_SHOW",
+    "FF": "STAND_PIC_2_SHOW",
+    "FFF": "STAND_PIC_3_SHOW",
+    "FFFF": "STAND_PIC_4_SHOW",
+    "FH": "STAND_PIC_DISPLAY",
+    "I": "ICON",
+    "M": "STAND_PIC_1_MO",
+    "MM": "STAND_PIC_2_MO",
+    "MMM": "STAND_PIC_3_MO",
+    "MMMM": "STAND_PIC_4_MO",
+    "AA": "STAND_PIC_FOCUS",
+    "SE": "SFX",
+    ".": "WAIT025",
+    "|": "WAIT1",
+    "{": "FONTUP",
+    "}": "FONTDOWN",
+    "!": "WAIT_KEYPRESS",
+}
+
+TEXTEFF_REV = {v: k for k, v in TEXTEFF.items()}
+
+
+def transform_wildmatch(match: re.Match):
+    groups = list(match.groups())
+    if len(groups) == 2 and groups[0] in TEXTEFF:
+        return f"<TEXT_CMD {TEXTEFF[groups[0]]}:{match.group(2)}>"
+    elif len(groups) == 1 and groups[0] in TEXTEFF:
+        return f"<TEXT_CMD {TEXTEFF[groups[0]]}:_NONE>"
+    else:
+        raise Exception(f"{match.string} {match} match?")
+
+
+def untransform_wildmatch(match: re.Match):
+    groups = list(match.groups())
+    if len(groups) == 2 and groups[0] in TEXTEFF_REV:
+        if groups[1].upper() == "_NONE":
+            return f"\\{TEXTEFF_REV[groups[0]]}"
+        return f"\\{TEXTEFF_REV[groups[0]]}[{match.group(2)}]"
+    else:
+        raise Exception(f"{match.string} {match} match?")
 
 
 def transform_text(text: str):
@@ -60,11 +106,8 @@ def transform_text(text: str):
     text = JP_DEEXPAND.sub("...", text)
     # Experiment
     # The trick with fixing \. is to expand it into a for for the LLM to keep / rmemeber.
-    text = WAIT025.sub("<PAUSE 0.25s>", text)
-    text = WAIT1.sub("<PAUSE 1s>", text)
-    text = WAITKEYPRESS.sub("<PAUSE KEY_PRESS>", text)
-    text = SFX.sub(r"<SFX \1>", text)
-    text = SMPPOSE.sub(r"<SM_POSE \1>", text)
+    text = NOARG_CMD.sub(transform_wildmatch, text)
+    text = TEXT_CMD.sub(transform_wildmatch, text)
     return text
     # ruby text is complex.
     # I know that RJ366405 uses it in such a way
@@ -76,29 +119,13 @@ def transform_text(text: str):
     # text = JP_RUBY.sub("...",text)
 
 
-SFXUnTransform = re.compile(r"<SFX (\d+)>")
-SMPPOSEUnTransform = re.compile(r"<SM_POSE (.+)>")
+TEXT_CMD_EX = re.compile(r"<TEXT_CMD (.*?):(.*?)>")
 
 
 def detransform(text: str):
     # print(text)
-    replacements = (
-        text
-        # Fix weird spacing issues.
-        .replace("<PAUSE KEY PRESS>", "<PAUSE KEY_PRESS>")
-        .replace("<PAUSE KEYPRESS>", "<PAUSE KEY_PRESS>")
-        .replace(" <PAUSE 0.25s> ", "\\.")
-        .replace(" <PAUSE 1s> ", "\\|")
-        .replace(" <PAUSE KEY_PRESS> ", "\\!")
-        .replace(" <PAUSE 0.25s>", "\\.")
-        .replace(" <PAUSE 1s>", "\\|")
-        .replace(" <PAUSE KEY_PRESS>", "\\!")
-        .replace("<PAUSE 0.25s>", "\\.")
-        .replace("<PAUSE 1s>", "\\|")
-        .replace("<PAUSE KEY_PRESS>", "\\!")
-    )
-    replacements = SFXUnTransform.sub(r"\\SE[\1]", replacements)
-    replacements = SMPPOSEUnTransform.sub(r"\\SM[\1]", replacements)
+    replacements = text
+    replacements = TEXT_CMD_EX.sub(untransform_wildmatch, replacements)
     return replacements
 
 
@@ -198,7 +225,7 @@ class OAICompatTranslator:
     async def stream_to_str(
         self,
         stream: AsyncGenerator[httpx_sse.EventSource, None],
-    ) -> tuple[str|None,str]:
+    ) -> tuple[str | None, str]:
         buffer = StringIO()
         timer = time.monotonic()
         async with stream as fff:  # type: ignore
@@ -213,7 +240,7 @@ class OAICompatTranslator:
                                 event_data = try_json_decode(event.data)
                                 if event_data is None:
                                     logger.warning(
-                                        f"Server returned an error: \"{event_data}\""
+                                        f'Server returned an error: "{event_data}"'
                                     )
                                     return (None, f"Error: {event_data}")
                                 if "error" in event_data:
@@ -227,7 +254,11 @@ class OAICompatTranslator:
                                         return (None, "Japanese Early Drop")
                                     buffer.write(text)
                                     if self.debug:
-                                        print(event_data["choices"][0]["text"], end="",flush=True)
+                                        print(
+                                            event_data["choices"][0]["text"],
+                                            end="",
+                                            flush=True,
+                                        )
                                     pbar.update(1)
                     # print(event)
                 return (buffer.getvalue(), "OK")
@@ -293,8 +324,8 @@ class OAICompatTranslator:
                     logger.warning(f"Cannot decode response: {e}. Tries left: {tries}")
             else:
                 json_text = response
-            
-            response_json: dict|None = try_json_decode(json_text)
+
+            response_json: dict | None = try_json_decode(json_text)
             extracted: str = json_text
             if response_json is None:
                 logger.debug(json_text)
@@ -392,8 +423,8 @@ class OAICompatTranslator:
                 if self.template:
                     queue.append(chunk)
                     messages = [*queue]
-                    messages.insert(-2,{"role": "system", "content": system})
-                    
+                    messages.insert(-2, {"role": "system", "content": system})
+
                     vars = {
                         "add_generation_prompt": True,
                         "stop_strings": [],

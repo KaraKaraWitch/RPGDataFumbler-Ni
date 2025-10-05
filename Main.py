@@ -12,7 +12,7 @@ from FumblerLibrary.LibraryMain import process_csv, process_rpgmaker
 app = typer.Typer(pretty_exceptions_enable=False)
 
 
-def prepare_config(root_dir: pathlib.Path):
+def prepare_config(root_dir: pathlib.Path, root: str):
     config = TomlConfig(
         **tomli.loads((root_dir / "config.toml").read_text(encoding="utf-8"))
     )
@@ -20,7 +20,7 @@ def prepare_config(root_dir: pathlib.Path):
         (root_dir / "knowledge_db.toml").read_text(encoding="utf-8")
     )["db"]
     config.prompts.samples = orjson.loads(
-        (root_dir / "sample.json").read_text(encoding="utf-8")
+        (root_dir / f"sample.{root.lower()}.json").read_text(encoding="utf-8")
     )
     return config
 
@@ -55,7 +55,7 @@ def rpgmaker(
 
     files = list((main_dir / "inputs").glob("*.json"))
     output_folder = pathlib.Path("outputs")
-    config = prepare_config(main_dir)
+    config = prepare_config(main_dir, "rpgmaker")
     asyncio.run(
         process_rpgmaker(
             files, output_folder, config, dump=dump, format=format, precheck=precheck
@@ -70,7 +70,7 @@ def csv():
 
     files = list((main_dir / "inputs").glob("*.csv"))
     output_folder = pathlib.Path("outputs")
-    config = prepare_config(main_dir)
+    config = prepare_config(main_dir, "csv")
     asyncio.run(process_csv(files, output_folder, config))
 
 
